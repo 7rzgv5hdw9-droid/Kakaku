@@ -348,10 +348,14 @@ function startDrag(e, spine){
   const block = spine.closest(".pm-cat");
   const list = document.getElementById("catList");
   let startY = e.clientY;
+  const originY = e.clientY;
+  const t0 = Date.now();
+  let moved = false;
   block.classList.add("dragging");
 
   const GAP = 10;
   const move = ev => {
+    if (Math.abs(ev.clientY - originY) > 6) moved = true;
     const dy = ev.clientY - startY;
     block.style.transform = `translateY(${dy}px)`;
     const prev = block.previousElementSibling;
@@ -387,10 +391,64 @@ function startDrag(e, spine){
       c.order = (orderMap[c.id] !== undefined) ? orderMap[c.id] : n++;
     });
     save();
+    if (!moved && Date.now() - t0 < 600) openCatEdit(block.dataset.cat);
   };
   spine.addEventListener("pointermove", move);
   spine.addEventListener("pointerup", up);
   spine.addEventListener("pointercancel", up);
+}
+
+/* カテゴリ一括編集（名前・色） */
+function openCatEdit(catId){
+  const cat = state.categories.find(c=>c.id===catId);
+  if (!cat) return;
+  const count = state.products.filter(p=>p.categoryId===cat.id).length;
+
+  const overlay = document.createElement("div");
+  overlay.className = "pm-overlay";
+  overlay.innerHTML = `<div class="pm-sheet">
+    <div class="pm-sheet-head">
+      <div class="pm-sheet-title">カテゴリを編集</div>
+      <button class="pm-x" id="cClose">✕</button>
+    </div>
+    <div class="pm-setting-desc">このカテゴリの商品 ${count} 件すべてに反映されます</div>
+    <div class="pm-field"><label>カテゴリ名</label><input id="cEditName" value="${esc(cat.name)}"></div>
+    <div class="pm-field"><label>カテゴリ色</label><div class="pm-colors" id="cEditColors"></div></div>
+    <button class="pm-primary" id="cSave">保存する</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e=>{ if (e.target===overlay) close(); });
+  const close = () => overlay.remove();
+  overlay.querySelector("#cClose").addEventListener("click", close);
+
+  let color = cat.color;
+  const colorsEl = overlay.querySelector("#cEditColors");
+  const renderColors = () => {
+    colorsEl.innerHTML = COLORS.map(c=>
+      `<button class="pm-color${color===c.v?" on":""}" type="button" title="${c.n}" style="background:${c.v}" data-c="${c.v}"></button>`).join("");
+    colorsEl.querySelectorAll("button").forEach(b=>
+      b.addEventListener("click", ()=>{ color = b.dataset.c; renderColors(); }));
+  };
+  renderColors();
+
+  overlay.querySelector("#cSave").addEventListener("click", ()=>{
+    const newName = overlay.querySelector("#cEditName").value.trim() || cat.name;
+    const target = state.categories.find(c=>c.name===newName && c.id!==cat.id);
+    if (target){
+      /* 同名カテゴリが既にある場合は統合 */
+      state.products.forEach(p=>{ if (p.categoryId===cat.id) p.categoryId = target.id; });
+      target.color = color;
+      state.categories = state.categories.filter(c=>c.id!==cat.id);
+      showToast(`「${newName}」に統合しました`);
+    } else {
+      cat.name = newName;
+      cat.color = color;
+      showToast("カテゴリを更新しました");
+    }
+    save();
+    close();
+    render();
+  });
 }
 
 /* ---------- 比較計算 ---------- */
