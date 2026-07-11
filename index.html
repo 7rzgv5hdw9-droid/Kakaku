@@ -111,6 +111,10 @@ button { cursor:pointer; }
   border:1px solid var(--accent); background:none; color:var(--accent); font-weight:700;
 }
 .pm-danger { padding:12px; border-radius:12px; font-size:15px; }
+.pm-secondary {
+  padding:12px; border-radius:12px; border:1px solid var(--line);
+  background:var(--surface); color:var(--ink); font-size:15px; font-weight:700;
+}
 .pm-danger-sm { padding:7px 14px; border-radius:99px; font-size:13px; align-self:flex-start; }
 
 /* 比較計算 */
@@ -277,7 +281,7 @@ function showToast(msg){
 }
 
 /* ---------- タブ ---------- */
-const TABS = [["list","一覧"],["compare","比較計算"],["add","商品追加"],["settings","設定"]];
+const TABS = [["list","一覧"],["compare","比較計算"],["settings","設定"]];
 function renderTabs(){
   const el = document.getElementById("tabs");
   el.innerHTML = TABS.map(([k,l]) =>
@@ -641,9 +645,11 @@ function openEdit(productId){
     </div>
     <div class="pm-field"><label>商品名</label><input id="eName" value="${esc(product.name)}"></div>
     <div class="pm-field"><label>カテゴリ</label><input id="eCat" value="${esc(cat?cat.name:"")}"></div>
+    <div class="pm-field"><label>カテゴリ色</label><div class="pm-colors" id="eColors"></div></div>
     <div class="pm-rec-title">店舗ごとの価格</div>
     <div id="eRecs"></div>
     <button class="pm-primary" id="eSave">保存する</button>
+    <button class="pm-secondary" id="eAddStore">＋ 別の店舗の価格を追加</button>
     <button class="pm-danger" id="eDelete">商品ごと削除</button>
   </div>`;
   document.body.appendChild(overlay);
@@ -651,6 +657,17 @@ function openEdit(productId){
 
   let recs = product.records.map(r=>({...r}));
   const recsEl = overlay.querySelector("#eRecs");
+
+  /* カテゴリ色パレット（初期値は現在の色） */
+  let eColor = cat ? cat.color : COLORS[0].v;
+  const eColorsEl = overlay.querySelector("#eColors");
+  const renderEColors = () => {
+    eColorsEl.innerHTML = COLORS.map(c=>
+      `<button class="pm-color${eColor===c.v?" on":""}" type="button" title="${c.n}" style="background:${c.v}" data-c="${c.v}"></button>`).join("");
+    eColorsEl.querySelectorAll("button").forEach(b=>
+      b.addEventListener("click", ()=>{ eColor = b.dataset.c; renderEColors(); }));
+  };
+  renderEColors();
   const renderRecs = () => {
     recsEl.innerHTML = recs.length===0
       ? `<div class="dim" style="font-size:13px">価格記録がありません</div>`
@@ -689,28 +706,42 @@ function openEdit(productId){
   const close = () => overlay.remove();
   overlay.querySelector("#eClose").addEventListener("click", close);
 
+  overlay.querySelector("#eAddStore").addEventListener("click", ()=>{
+    syncRecs();
+    recs.push({ id:uid(), store:"", price:"", amount:"", unit:sortedUnits()[0], createdAt:null, updatedAt:null });
+    renderRecs();
+    const blocks = recsEl.querySelectorAll("[data-rec]");
+    const last = blocks[blocks.length-1];
+    if (last){ last.scrollIntoView({block:"nearest"}); last.querySelector('[data-f="store"]').focus(); }
+  });
+
   overlay.querySelector("#eSave").addEventListener("click", ()=>{
     syncRecs();
     const now = new Date().toISOString();
     const catName = overlay.querySelector("#eCat").value.trim() || "未分類";
     let c = state.categories.find(x=>x.name===catName);
     if (!c){
-      c = { id:uid(), name:catName, color:COLORS[0].v, order:state.categories.length };
+      c = { id:uid(), name:catName, color:eColor, order:state.categories.length };
       state.categories.push(c);
+    } else {
+      c.color = eColor;
     }
     const newName = overlay.querySelector("#eName").value.trim();
     product.name = newName || product.name;
     product.categoryId = c.id;
-    product.records = recs.map(r=>{
-      const orig = product.records.find(o=>o.id===r.id);
-      const price = parseFloat(r.price) || 0;
-      const amount = parseFloat(r.amount) || 1;
-      const priceChanged = orig && orig.price !== price;
-      return {
-        ...r, store: String(r.store).trim(), price, amount,
-        updatedAt: priceChanged ? now : r.updatedAt,
-      };
-    });
+    product.records = recs
+      .filter(r => r.createdAt || String(r.store).trim() || parseFloat(r.price) > 0)
+      .map(r=>{
+        const orig = product.records.find(o=>o.id===r.id);
+        const price = parseFloat(r.price) || 0;
+        const amount = parseFloat(r.amount) || 1;
+        const priceChanged = orig && orig.price !== price;
+        return {
+          ...r, store: String(r.store).trim(), price, amount,
+          createdAt: r.createdAt || now,
+          updatedAt: priceChanged ? now : r.updatedAt,
+        };
+      });
     save();
     close();
     render();
