@@ -73,6 +73,7 @@ button { cursor:pointer; }
 .pm-item:last-child { border-bottom:none; }
 .pm-item-name { font-weight:600; font-size:15px; }
 .pm-item-store { font-size:12px; color:var(--sub); }
+.pm-item-count { margin-left:6px; font-size:10px; color:var(--sub); opacity:.75; }
 .pm-item-right { text-align:right; flex-shrink:0; }
 .pm-item-price { font-weight:700; font-variant-numeric:tabular-nums; }
 .pm-item-up {
@@ -323,10 +324,11 @@ function renderList(body){
     for (const p of prods){
       const best = cheapestRecord(p.records);
       const up = best ? best.price/best.amount : Infinity;
+      const others = p.records.length - 1;
       html += `<button class="pm-item" data-edit="${p.id}">
         <div class="pm-item-left">
           <div class="pm-item-name">${esc(p.name)}</div>
-          <div class="pm-item-store">${best?esc(best.store):"—"}</div>
+          <div class="pm-item-store">${best?esc(best.store):"—"}${others>0?`<span class="pm-item-count">他${others}店</span>`:""}</div>
         </div>
         <div class="pm-item-right">
           <div class="pm-item-price">${best?fmtYen(best.price):"—"}</div>

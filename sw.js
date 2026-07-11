@@ -1,5 +1,5 @@
 /* 価格メモ Service Worker — オフライン対応 */
-const CACHE = "pricememo-v3";
+const CACHE = "pricememo-v5";
 const ASSETS = [
   "./",
   "./index.html",
