@@ -164,6 +164,7 @@ button { cursor:pointer; }
 }
 .pm-rec-title { font-size:13px; font-weight:800; color:var(--sub); margin-top:2px; }
 .pm-rec-meta { font-size:11px; color:var(--sub); }
+.pm-rec-btns { display:flex; gap:8px; flex-wrap:wrap; }
 
 /* 設定 */
 .pm-setting-row, .pm-setting-col {
@@ -228,6 +229,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
 /* ---------- 状態 ---------- */
 let state = load();
 let tab = "list";
+let comparePrefill = null; /* 編集画面→比較計算Aへの引き継ぎ用 */
 
 function load(){
   try {
@@ -510,6 +512,15 @@ function renderCompare(body){
   };
   ["pA","aA","uA","pB","aB","uB"].forEach(id =>
     document.getElementById(id).addEventListener("input", update));
+
+  /* 編集画面からの引き継ぎ */
+  if (comparePrefill){
+    document.getElementById("pA").value = comparePrefill.price;
+    document.getElementById("aA").value = comparePrefill.amount;
+    document.getElementById("uA").value = comparePrefill.unit;
+    comparePrefill = null;
+    update();
+  }
 }
 
 /* ---------- サジェスト ---------- */
@@ -683,14 +694,44 @@ function openEdit(productId){
           <div class="pm-field"><label>単位</label>
             <select data-f="unit">${unitOpts(r.unit)}</select></div>
         </div>
-        <div class="pm-rec-meta">追加：${fmtDate(r.createdAt)}${r.updatedAt?"　更新："+fmtDate(r.updatedAt):""}</div>
-        <button class="pm-danger-sm" data-del="${r.id}">この店舗の記録を削除</button>
+        <div class="pm-rec-meta"><span data-up>単価 —</span>　追加：${fmtDate(r.createdAt)}${r.updatedAt?"　更新："+fmtDate(r.updatedAt):""}</div>
+        <div class="pm-rec-btns">
+          <button class="pm-danger-sm" data-del="${r.id}">この店舗の記録を削除</button>
+          <button class="pm-chip" data-cmp="${r.id}">比較計算Aに入力</button>
+        </div>
       </div>`).join("");
     recsEl.querySelectorAll("[data-del]").forEach(b=>
       b.addEventListener("click", ()=>{
         syncRecs();
         recs = recs.filter(r=>r.id!==b.dataset.del);
         renderRecs();
+      }));
+    /* 単価のライブ表示 */
+    const updUP = el => {
+      const price = parseFloat(el.querySelector('[data-f="price"]').value);
+      const amount = parseFloat(el.querySelector('[data-f="amount"]').value);
+      const unit = el.querySelector('[data-f="unit"]').value;
+      el.querySelector("[data-up]").textContent =
+        (price>0 && amount>0) ? `単価 ${fmtYen(price/amount)}/${unit}` : "単価 —";
+    };
+    recsEl.querySelectorAll("[data-rec]").forEach(el=>{
+      updUP(el);
+      el.querySelectorAll("input,select").forEach(i=>
+        i.addEventListener("input", ()=>updUP(el)));
+    });
+    /* 比較計算Aへ入力して移動 */
+    recsEl.querySelectorAll("[data-cmp]").forEach(b=>
+      b.addEventListener("click", ()=>{
+        const el = recsEl.querySelector(`[data-rec="${b.dataset.cmp}"]`);
+        comparePrefill = {
+          price: el.querySelector('[data-f="price"]').value,
+          amount: el.querySelector('[data-f="amount"]').value,
+          unit: el.querySelector('[data-f="unit"]').value,
+        };
+        close();
+        tab = "compare";
+        render();
+        showToast("商品Aに入力しました");
       }));
   };
   const syncRecs = () => {
